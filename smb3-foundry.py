@@ -8,10 +8,13 @@ import sys
 import traceback
 
 import foundry.plugins
+from foundry.plugins import LoadedPlugin
+
+from pathlib import Path
 
 from PySide2.QtWidgets import QApplication, QMessageBox
 
-from foundry import auto_save_rom_path, github_issue_link
+from foundry import auto_save_rom_path, github_issue_link, default_plugins_path
 from foundry.gui.AutoSaveDialog import AutoSaveDialog
 from foundry.gui.settings import load_settings, save_settings
 
@@ -36,7 +39,19 @@ def iter_namespace(ns_pkg):
     print('Inside iter_namespace')
     return pkgutil.iter_modules(ns_pkg.__path__, ns_pkg.__name__ + ".")
 
+def discover_plugins():
+    fpls = []
+    plugins = []
+    print('Discovering plugins in "{}"'.format(default_plugins_path))
+    for dirpath, dirnames, filenames in os.walk(default_plugins_path):
+        fpls += [os.path.join(dirpath, f) for f in filenames if f.endswith('.fpl')]
+    print('\tFound {} possible plugins'.format(len(fpls)))
+    for fpl in fpls:
+        print('\t\tLoading {}...'.format(os.path.basename(fpl)))
+        plugins.append(LoadedPlugin(fpl))
+
 def load_plugins(mw):
+    fpls = discover_plugins()
     print('Inside load_plugins')
     discovered_plugin_modules = {
         name: importlib.import_module(name)

@@ -1,4 +1,4 @@
-from ..api._v1 import *
+from api._v1 import *
 
 class Plugin1(FoundryPlugin):
     def __init__(self):

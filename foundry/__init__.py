@@ -14,6 +14,9 @@ home_dir.mkdir(parents=True, exist_ok=True)
 
 default_settings_path = home_dir / "settings"
 
+default_plugins_path = home_dir / "plugins"
+default_plugins_path.mkdir(parents=True, exist_ok=True)
+
 auto_save_path = home_dir / "auto_save"
 auto_save_path.mkdir(parents=True, exist_ok=True)
 
