@@ -1,14 +1,13 @@
 #!/usr/bin/env python3
-import importlib
-import inspect
 import logging
 import os
+from os.path import join, basename
 import pkgutil
 import sys
 import traceback
 
 import foundry.plugins
-from foundry.plugins import LoadedPlugin
+from foundry.plugins import LoadedPlugin, LoadedPluginException
 
 from pathlib import Path
 
@@ -39,36 +38,55 @@ def iter_namespace(ns_pkg):
     print('Inside iter_namespace')
     return pkgutil.iter_modules(ns_pkg.__path__, ns_pkg.__name__ + ".")
 
-def discover_plugins():
+def _discover_plugins():
+    '''Discover .fpl files in the default plugins path.
+    Creates LoadedPlugin objects for each found .fpl file. The LoadedPlugin
+    class ensures the format of each .fpl is correct.
+    '''
+    print('[+] Discovering plugins in "{}"'.format(default_plugins_path))
     fpls = []
-    plugins = []
-    print('Discovering plugins in "{}"'.format(default_plugins_path))
     for dirpath, dirnames, filenames in os.walk(default_plugins_path):
-        fpls += [os.path.join(dirpath, f) for f in filenames if f.endswith('.fpl')]
-    print('\tFound {} possible plugins'.format(len(fpls)))
+        fpls += [join(dirpath, f) for f in filenames if f.endswith('.fpl')]
+    print('    [+] Found {} possible plugins'.format(len(fpls)))
+
+    # fpls is now a list of string paths, e.g
+    # [
+    #      '/home/user/.smb3foundry/plugins/expand-base-rom.fpl',
+    #      '/home/user/.smb3foundry/plugins/on-off-blocks.fpl',
+    # ]
+    plugins = {}
     for fpl in fpls:
-        print('\t\tLoading {}...'.format(os.path.basename(fpl)))
-        plugins.append(LoadedPlugin(fpl))
+        print('{:8}- Extracting {}...'.format(' ', os.path.basename(fpl)))
+        try:
+            lp = LoadedPlugin(fpl)
+        except LoadedPluginException as e:
+            print('{:12}{}'.format(' ', e))
+            continue
+        plugins[fpl] = lp
+
+    return plugins
+
+def _import_plugin(lp):
+    '''Import the python files in the LoadedPlugin's python/ directory'''
+    lp.load_python()
+    for mod in lp.modules:
+        print('{:8}- Import {}'.format(' ', mod.__file__))
+    lp.import_python()
+
+def _load_plugin(lp, mw):
+    '''Call the LoadedPlugin instance's `load` method'''
+    for inst in lp.instances:
+        inst.load(mw)
 
 def load_plugins(mw):
-    fpls = discover_plugins()
-    print('Inside load_plugins')
-    discovered_plugin_modules = {
-        name: importlib.import_module(name)
-        for _, name, _ in iter_namespace(foundry.plugins)
-    }
-    discovered_plugin_instances = []
-    for modname,mod in discovered_plugin_modules.items():
-        for name, cls_ in inspect.getmembers(mod):
-            if inspect.isclass(cls_):
-                for b in cls_.__bases__:
-                    if issubclass(b, FoundryPlugin):
-                        # If one of this class's base classes is FoundryPlugin,
-                        # then this is a plugin we need to create an instance of.
-                        discovered_plugin_instances.append(cls_())
-                        break
-    for instance in discovered_plugin_instances:
-        instance.load(mw)
+    plugins = _discover_plugins()
+    if not plugins:
+        return
+    for fpl, lp in plugins.items():
+        print('    [+] Loading {}...'.format(lp.name))
+        _import_plugin(lp)
+        _load_plugin(lp, mw)
+    return plugins
 
 def main(path_to_rom):
     load_settings()
@@ -86,7 +104,7 @@ def main(path_to_rom):
             )
 
     mw = MainWindow(path_to_rom)
-    load_plugins(mw)
+    plugins = load_plugins(mw)
     app.exec_()
 
     save_settings()

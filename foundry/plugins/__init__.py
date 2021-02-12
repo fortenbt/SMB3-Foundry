@@ -1,1 +1,1 @@
-from .loaded_plugin import LoadedPlugin
+from .loaded_plugin import LoadedPlugin, LoadedPluginException
